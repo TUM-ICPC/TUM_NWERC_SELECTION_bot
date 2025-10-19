@@ -1,6 +1,10 @@
 .telegram_api_url
 .atcoder_config.txt
+# login in and copy cookie in the form  "REVEL_SESSION="
+.atcoder_cookies.txt 
 chatIds.json
+.codeforces_cookies.txt
+.codeforce_config.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

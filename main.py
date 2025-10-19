@@ -2,11 +2,11 @@ from datetime import datetime
 
 from ranking import Ranking
 import util
-from util import Table, readConfig
+from util import Table, readConfigOffline
 from contestDates import ContestDates
 
 if __name__ == '__main__':
-  config = readConfig()
+  config = readConfigOffline()
 
   contestDates = ContestDates(config)
   newContestDates = contestDates.getDates()

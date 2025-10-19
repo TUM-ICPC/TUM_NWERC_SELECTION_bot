@@ -19,6 +19,8 @@ def invalidCommand(cid, msg):
   tg.sendMessage(cid, "Invalid command!")
 
 def handleMessage(chatId, text):
+  if text is None:
+    return 
   if not chatId in chatIds:
     chatIds.append(chatId)
     util.saveChatIds(chatIds)
@@ -53,14 +55,14 @@ def updateUpcomingContest():
   ranking.updateDates()
 
 def updateConfig():
-  config = util.readConfig()
+  config = util.readConfigOffline()
   ranking.updateConfig(config)
 
 def mainLoop():
   global config
   global ranking
   global chatIds
-  config = util.readConfig()
+  config = util.readConfigOffline()
   ranking = Ranking(config)
   chatIds = util.readChatIds()
 

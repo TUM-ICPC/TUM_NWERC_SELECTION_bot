@@ -1,38 +1,124 @@
 {
-  "startDate": "01.09.2025:00.00.01",
-  "endDate": "15.10.2025:23.59.59",
-
-  "startDate_onsite": "11.10.2025:00.00.01",
-  "endDate_onsite": "27.10.2025:23.59.59",
-
-
+  "startDate": "15.09.2026:00.00.01",
+  "endDate": "11.10.2026:23.59.59",
+  
+  "_pastTestDates": {
+    "startDate": "01.09.2025:00.00.01",
+    "endDate": "15.10.2025:23.59.59"
+  },
+  "onsiteGyms": [],
   "users": {
-    "Xuan": {"codeforces-handle": "Aukotiq", "atcoder-handle": "zx0710"},
-    "Pascal": {"codeforces-handle": "Prometheus_", "atcoder-handle": "Prometheus_"},
-    "Jiong": {"codeforces-handle": "LJIONG", "atcoder-handle": "LJIONG"},
-    "Richard": {"codeforces-handle": "richardl02", "atcoder-handle": "richardl02"},
-    "Linhan": {"codeforces-handle": "ForeverT", "atcoder-handle": "ForeverT"},
-    "Nikita": {"codeforces-handle": "iam.nikita.kostin", "atcoder-handle": "iamnikitakostin"},
-    "Abdelrahman": {"codeforces-handle": "abdelrahman_orief", "atcoder-handle": "Abdelrahman"},
-    "Elyes": {"codeforces-handle": "ElyesChaabouni", "atcoder-handle": "ElyesChaabouni"},
-    "Iheb": {"codeforces-handle": "ihG", "atcoder-handle": "ihG"},
-    "Jonas": {"codeforces-handle": "Ladner", "atcoder-handle": "Ladner"},
-    "Saleh": {"codeforces-handle": "jahangard", "atcoder-handle": "Saleh_P"},
-    "Ala": {"codeforces-handle": "Al4", "atcoder-handle": "____no_handle_known____"},
-    "Peter": {"codeforces-handle": "Beyond", "atcoder-handle": "Pedda"},
-    "Hedi": {"codeforces-handle": "HediChehaidar", "atcoder-handle": "HediChehaidar"},
-    "Aodie": {"codeforces-handle": "Juliane", "atcoder-handle": "Juliane"},
-    "Mu": {"codeforces-handle": "Obsidius", "atcoder-handle": "Harmony"},
-    "Roman": {"codeforces-handle": "Mischuk", "atcoder-handle": "romamiyk"},
-    "Matas": {"codeforces-handle": "MTX_AS", "atcoder-handle": "mtxas"},
-    "Weiyuan": {"codeforces-handle": "sinyita", "atcoder-handle": "sinyita"},
-    "Artem": {"codeforces-handle": "artemi__sav", "atcoder-handle": "artem_svl"},
-    "Iurii": {"codeforces-handle": "Hello_zoka", "atcoder-handle": "Hello_zoka"},   
-    "Gleb": {"codeforces-handle": "I.Gleb", "atcoder-handle": "I_Gleb"},
-    "Layth": {"codeforces-handle": "Potoccino", "atcoder-handle": "pro_potato"},
-    "Isabel": {"codeforces-handle": "RocketGirl", "atcoder-handle": "isabel"},
-    "Danh": {"codeforces-handle": "BoopyTheNoob", "atcoder-handle": "BoopyTheNoob"},
-    "Chuyang": {"codeforces-handle": "chuangsheep", "atcoder-handle": "chuangsheep"},
-    "Xiansheng": {"codeforces-handle": "Aynomes", "atcoder-handle": "Semonya"}
+    "Xuan": {
+      "codeforces-handle": "Aukotiq",
+      "atcoder-handle": "zx0710"
+    },
+    "Pascal": {
+      "codeforces-handle": "Prometheus_",
+      "atcoder-handle": "Prometheus_"
+    },
+    "Jiong": {
+      "codeforces-handle": "LJIONG",
+      "atcoder-handle": "LJIONG"
+    },
+    "Richard": {
+      "codeforces-handle": "richardl02",
+      "atcoder-handle": "richardl02"
+    },
+    "Linhan": {
+      "codeforces-handle": "ForeverT",
+      "atcoder-handle": "ForeverT"
+    },
+    "Nikita": {
+      "codeforces-handle": "iam.nikita.kostin",
+      "atcoder-handle": "iamnikitakostin"
+    },
+    "Abdelrahman": {
+      "codeforces-handle": "abdelrahman_orief",
+      "atcoder-handle": "Abdelrahman"
+    },
+    "Elyes": {
+      "codeforces-handle": "ElyesChaabouni",
+      "atcoder-handle": "ElyesChaabouni"
+    },
+    "Iheb": {
+      "codeforces-handle": "ihG",
+      "atcoder-handle": "ihG"
+    },
+    "Jonas": {
+      "codeforces-handle": "Ladner",
+      "atcoder-handle": "Ladner"
+    },
+    "Saleh": {
+      "codeforces-handle": "jahangard",
+      "atcoder-handle": "Saleh_P"
+    },
+    "Ala": {
+      "codeforces-handle": "Al4",
+      "atcoder-handle": "____no_handle_known____"
+    },
+    "Peter": {
+      "codeforces-handle": "Beyond",
+      "atcoder-handle": "Pedda"
+    },
+    "Hedi": {
+      "codeforces-handle": "HediChehaidar",
+      "atcoder-handle": "HediChehaidar"
+    },
+    "Aodie": {
+      "codeforces-handle": "Juliane",
+      "atcoder-handle": "Juliane"
+    },
+    "Mu": {
+      "codeforces-handle": "Obsidius",
+      "atcoder-handle": "Harmony"
+    },
+    "Roman": {
+      "codeforces-handle": "Mischuk",
+      "atcoder-handle": "romamiyk"
+    },
+    "Matas": {
+      "codeforces-handle": "MTX_AS",
+      "atcoder-handle": "mtxas"
+    },
+    "Weiyuan": {
+      "codeforces-handle": "sinyita",
+      "atcoder-handle": "sinyita"
+    },
+    "Artem": {
+      "codeforces-handle": "artemi__sav",
+      "atcoder-handle": "artem_svl"
+    },
+    "Iurii": {
+      "codeforces-handle": "Hello_zoka",
+      "atcoder-handle": "Hello_zoka"
+    },
+    "Gleb": {
+      "codeforces-handle": "I.Gleb",
+      "atcoder-handle": "I_Gleb"
+    },
+    "Isabel": {
+      "codeforces-handle": "RocketGirl",
+      "atcoder-handle": "isabel"
+    },
+    "Danh": {
+      "codeforces-handle": "BoopyTheNoob",
+      "atcoder-handle": "BoopyTheNoob"
+    },
+    "Chuyang": {
+      "codeforces-handle": "chuangsheep",
+      "atcoder-handle": "chuangsheep"
+    },
+    "Xiansheng": {
+      "codeforces-handle": "Aynomes",
+      "atcoder-handle": "Semonya"
+    },
+    "Elias": {
+      "codeforces-handle": "El_as234",
+      "atcoder-handle": "El_as234"
+    },
+    "Саша": {
+      "codeforces-handle": "pravant",
+      "atcoder-handle": "DodJing"
+    }
   }
 }

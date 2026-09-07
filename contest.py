@@ -12,11 +12,20 @@ class Contest(ABC):
 	def __init__(self, id, handleMap):
 		self.handleMap = handleMap
 		self.id = id
+		self.name = str(id)
+		self.handlesSolved = None
+		self.numberSolved = None
 
 	# clear name of user (not handle) -> score in this contest
 	def getScore(self, name: str) -> float:
 		if self.handlesSolved is None:
 			self.updateScores()
+		# Remote standings can temporarily be unavailable. Treat that contest as
+		# empty and do not repeat the same failed request for every user.
+		if self.handlesSolved is None or self.numberSolved is None:
+			print(f"[WARN] No standings available for contest {self.id}; using 0 scores.")
+			self.handlesSolved = {}
+			self.numberSolved = {}
 		#print(self.numberSolved)
 		handle = self.handleMap[name][self.handleString]
 		return self.calcHandleScore(handle)

@@ -1,417 +1,270 @@
-import os
-import re
-from typing import Optional
-
-import requests
-from bs4 import BeautifulSoup
+import math
 
 from contest import Contest
 import codeforcesApi as cfapi
 
 
 class CodeforcesGymContest(Contest):
-    """
-    Fetch standings for a Codeforces Gym contest which typically requires login.
-    Login credentials are read from a two-line file '.codeforce_config.txt':
-      line1: handleOrEmail
-      line2: password
-    """
+    """Score a Gym from configured original-problem mappings."""
 
     handleString = "codeforces-handle"
-    _session: Optional[requests.Session] = None
+    _source_distribution_cache = {}
 
-    LOGIN_FILE = ".codeforce_config.txt"
-    COOKIE_FILE = ".codeforces_cookies.txt"
-    UA = (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-    )
-
-    def __init__(self, id, handleMap):
-        super().__init__(id, handleMap)
-
-    # ---------- Session / Auth ----------
-    @classmethod
-    def _ensure_session(cls):
-        if cls._session is not None:
-            return
-        sess = requests.Session()
-        sess.headers.update({
-            "User-Agent": cls.UA,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://codeforces.com/enter",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-        })
-
-        # Try cookie-based auth first (most reliable when login page is protected)
-        try:
-            if os.path.exists(cls.COOKIE_FILE):
-                with open(cls.COOKIE_FILE, "r", encoding="utf-8") as f:
-                    raw = f.read()
-                # support three formats:
-                # 1) one-per-line: key=value
-                # 2) single header line: key=value; key2=value2; ...
-                # 3) standalone token (assume RCPC)
-                def set_cookie_line(line: str):
-                    line = line.strip()
-                    if not line:
-                        return
-                    # Allow pasting lines starting with 'Cookie:' from browser
-                    if line.lower().startswith("cookie:"):
-                        line = line.split(":", 1)[1].strip()
-                    if ";" in line and "=" in line:
-                        # header format
-                        parts = [p.strip() for p in line.split(";") if p.strip()]
-                        for p in parts:
-                            if "=" in p:
-                                k, v = p.split("=", 1)
-                                sess.cookies.set(k.strip(), v.strip(), domain="codeforces.com")
-                    elif "=" in line:
-                        k, v = line.split("=", 1)
-                        sess.cookies.set(k.strip(), v.strip(), domain="codeforces.com")
-                    else:
-                        # assume RCPC token
-                        sess.cookies.set("RCPC", line, domain="codeforces.com")
-
-                ua_overridden = False
-                if "\n" in raw:
-                    for ln in raw.splitlines():
-                        if ln.strip().lower().startswith("user-agent:"):
-                            ua = ln.split(":", 1)[1].strip()
-                            if ua:
-                                sess.headers["User-Agent"] = ua
-                                ua_overridden = True
-                        else:
-                            set_cookie_line(ln)
-                else:
-                    # single line: could be cookie header; could also be 'User-Agent: ...'
-                    if raw.strip().lower().startswith("user-agent:"):
-                        ua = raw.split(":", 1)[1].strip()
-                        if ua:
-                            sess.headers["User-Agent"] = ua
-                            ua_overridden = True
-                    else:
-                        set_cookie_line(raw)
-                print("  -> Loaded cookies from .codeforces_cookies.txt")
-                if ua_overridden:
-                    print("  -> Using User-Agent from cookie file")
-        except Exception as e:
-            print(f"  -> Failed to load cookies: {e}")
-        # Attempt login
-        try:
-            creds = cls._read_creds()
-            if creds is not None:
-                handle, password = creds
-                print(f"  -> Attempting to login as '{handle}'...")
-
-                # Get login page and extract CSRF token
-                r = sess.get("https://codeforces.com/enter", timeout=20)
-                soup = BeautifulSoup(r.text, "html.parser")
-                token = None
-                for inp in soup.find_all("input"):
-                    if inp.get("name") == "csrf_token":
-                        token = inp.get("value")
-                        break
-
-                if not token:
-                    print("  -> WARNING: Could not find CSRF token")
-                else:
-                    # Submit login form
-                    payload = {
-                        "csrf_token": token,
-                        "action": "enter",
-                        "handleOrEmail": handle,
-                        "password": password,
-                        "remember": "on",
-                    }
-                    sess.post("https://codeforces.com/enter", data=payload, timeout=20)
-
-                    # Check if login was successful by trying to access settings page
-                    check = sess.get("https://codeforces.com/settings/general", timeout=10)
-                    if "logout" in check.text.lower() or handle.lower() in check.text.lower():
-                        print(f"  -> Successfully logged in as '{handle}'")
-                    else:
-                        print("  -> WARNING: Login may have failed (didn't find logout link)")
-            else:
-                print("  -> No credentials file found, proceeding without login")
-        except Exception as e:
-            print(f"  -> Login exception: {e}")
-            # Continue anyway - some gyms might be public
-            pass
-
-        cls._session = sess
+    def __init__(
+        self,
+        contest_id,
+        handle_map,
+        problem_sources=(),
+        display_name=None,
+    ):
+        super().__init__(contest_id, handle_map)
+        self.name = display_name or f"Gym{contest_id}"
+        self.problem_sources = self.parse_problem_sources(problem_sources)
+        self._scored_problem_indices = set()
+        self._source_problem_weights = {}
 
     @classmethod
-    def _read_creds(cls) -> Optional[tuple[str, str]]:
-        if not os.path.exists(cls.LOGIN_FILE):
-            return None
-        try:
-            with open(cls.LOGIN_FILE, "r", encoding="utf-8") as f:
-                lines = [x.rstrip("\n") for x in f.readlines()]
-            if len(lines) >= 2:
-                return lines[0], lines[1]
-        except Exception:
-            return None
-        return None
+    def parse_problem_sources(cls, problem_sources):
+        return tuple(
+            cls._parse_problem_source(source) for source in problem_sources
+        )
 
-    # ---------- Standings ----------
+    @staticmethod
+    def _parse_problem_source(source):
+        """Convert one config entry to ``(contest_id, problem_index)``.
+
+        ``None`` marks an unrated Gym problem.
+        """
+        if source is None:
+            return None
+        if not isinstance(source, dict):
+            raise ValueError("Each problemSources entry must be an object or null.")
+
+        contest_id = source.get("contestId")
+        problem_index = source.get("problem")
+        if isinstance(contest_id, bool) or not isinstance(contest_id, int):
+            raise ValueError("problemSources.contestId must be a positive integer.")
+        if contest_id <= 0:
+            raise ValueError("problemSources.contestId must be a positive integer.")
+        if not isinstance(problem_index, str) or not problem_index.strip():
+            raise ValueError("problemSources.problem must be a non-empty string.")
+        return contest_id, problem_index.strip()
+
     def updateScores(self):
-        print("=" * 70)
-        print(f"Fetching CF Gym {self.id}")
-        print("=" * 70)
-        
         self.handlesSolved = {}
         self.numberSolved = {}
-        # Allow external override of display name
-        self.name = getattr(self, "_display_name", f"Gym{self.id}")
+        self._scored_problem_indices = set()
+        self._source_problem_weights = {}
 
-        # Check for offline HTML file FIRST (recommended approach) unless forced online
-        # Allow external override of offline HTML file path
-        offline_file = getattr(self, "_offline_html_path", f"gym_{self.id}_standings.html")
-        force_online = os.environ.get("CF_GYM_FORCE_ONLINE") in ("1", "true", "True")
-        if os.path.exists(offline_file) and not force_online:
-            print(f"✓ Found offline HTML: {offline_file}")
-            with open(offline_file, 'r', encoding='utf-8') as f:
-                html_content = f.read()
-            ok = self._parse_html(html_content)
-            # If requested, override difficulty distribution with official contest data
-            if ok:
-                self._maybe_override_with_official_distribution()
-            return ok
-        
-        # No offline file or force online - print instructions
-        if not os.path.exists(offline_file):
-            print("\n⚠ Offline HTML not found!")
-        else:
-            print("\n↻ Forcing online refresh (CF_GYM_FORCE_ONLINE=1) ...")
-        print("Due to Cloudflare protection, online access often fails unless you use real browser cookies.")
-        print("If you get 403, open your browser, login to Codeforces, copy document.cookie for codeforces.com,")
-        print("paste into .codeforces_cookies.txt, and optionally add a line 'User-Agent: <your browser UA>'.\n")
-
-        # Try API approach
-        CodeforcesGymContest._ensure_session()
-        try:
-            api_url = (
-                f"https://codeforces.com/api/contest.standings?contestId={self.id}"
-                f"&gym=true&showUnofficial=true&from=1&count=100000"
-            )
-            r = CodeforcesGymContest._session.get(api_url, timeout=20)
-            data = r.json()
-            if data.get('status') == 'OK':
-                print(f"✓ API worked for Gym {self.id}!")
-                return self._parse_api_response(data['result'])
-        except Exception as e:
-            print(f"  API failed: {e}")
-
-        # Try web scraping
-        print(f"Trying web scraping...")
-        try:
-            url = f"https://codeforces.com/gym/{self.id}/standings?locale=en"
-            r = CodeforcesGymContest._session.get(url, timeout=30)
-            print(f"  Status: {r.status_code}")
-            
-            if r.status_code == 200:
-                # Save for future use if successful
-                result = self._parse_html(r.text)
-                if result:
-                    with open(offline_file, 'w', encoding='utf-8') as f:
-                        f.write(r.text)
-                    print(f"✓ Saved to {offline_file} for future use")
-                    # post-parse override if configured
-                    self._maybe_override_with_official_distribution()
-                return result
-            else:
-                print(f"✗ Failed: HTTP {r.status_code}")
-                with open(f"gym_{self.id}_error.html", 'w') as f:
-                    f.write(r.text[:10000])
-                print(f"  (Error page saved to gym_{self.id}_error.html)")
-        except Exception as e:
-            print(f"✗ Web scraping failed: {e}")
-        
-        return False
-
-    def _parse_api_response(self, cfStandings):
-        """Parse API response."""
-        for i in range(len(cfStandings["problems"])):
-            self.numberSolved[i] = 0
-
-        rows = cfStandings["rows"]
-        for r in rows:
-            if not r["party"]["members"]:
-                continue
-            handle = r["party"]["members"][0]["handle"]
-            for i in range(len(r["problemResults"])):
-                solved = r["problemResults"][i]["points"] > 0
-                if not handle in self.handlesSolved:
-                    self.handlesSolved[handle] = []
-                if solved:
-                    self.handlesSolved[handle].append(i)
-                    self.numberSolved[i] += 1
-        
-        print(f"✓ Parsed {len(self.handlesSolved)} participants")
-        return True
-
-    # ---------- Difficulty override from official contest ----------
-    def _maybe_override_with_official_distribution(self):
-        """If a reference contest id is configured, fetch official per-problem
-        solved counts and total participants, and use them for scoring weights.
-        """
-        ref_id = getattr(self, "_reference_contest_id", None)
-        if not ref_id:
-            return
-        try:
-            counts, participants = self._load_official_distribution(ref_id)
-            if not counts or participants <= 0:
-                return
-            # Align problem count
-            # Keep only the first min(len(self.numberSolved), len(counts)) problems
-            k = min(len(self.numberSolved), len(counts))
-            new_counts = {i: counts[i] for i in range(k)}
-            # Replace numberSolved with official counts (aligned)
-            self.numberSolved = new_counts
-            # Record participants override for scoring
-            self._participants_override = participants
-            print(f"✓ Using official distribution from contest {ref_id}: participants={participants}, problems={k}")
-        except Exception as e:
-            print(f"  -> Could not load official distribution: {e}")
-
-    def _load_official_distribution(self, contest_id: int):
-        """Return (solved_counts_per_problem:list[int], participants:int) from CF API."""
-        params = {
-            "contestId": contest_id,
-            "participantTypes": "CONTESTANT,OUT_OF_COMPETITION",
-            "from": 1,
-            "count": 100000,
-        }
-        res = cfapi.request("contest.standings", params)
-        if not res:
-            return None, 0
-        problems = res.get("problems", [])
-        rows = res.get("rows", [])
-        participants = len(rows)
-        counts = [0 for _ in range(len(problems))]
-        for r in rows:
-            prs = r.get("problemResults", [])
-            for i in range(min(len(counts), len(prs))):
-                if prs[i].get("points", 0) > 0:
-                    counts[i] += 1
-        return counts, participants
-
-    # ---------- Override scoring to use official participants if available ----------
-    def getRawScore(self, handle: str) -> float:
-        participants = getattr(self, "_participants_override", None)
-        if not participants:
-            participants = len(self.handlesSolved)
-        score = 0
-        for taskI in self.handlesSolved.get(handle, []):
-            solvedFraction = (self.numberSolved.get(taskI, 0) / participants) if participants else 0
-            if solvedFraction > 0:
-                score += (1 - __import__('math').log(solvedFraction))
-        return score
-
-    def getAvgScore(self) -> float:
-        participants = getattr(self, "_participants_override", None)
-        if not participants:
-            participants = len(self.handlesSolved)
-        avgScore = 0
-        for taskI in self.numberSolved:
-            solvedFraction = (self.numberSolved.get(taskI, 0) / participants) if participants else 0
-            if solvedFraction > 0:
-                avgScore += solvedFraction * (1 - __import__('math').log(solvedFraction))
-        return avgScore
-
-    def _parse_html(self, html_content):
-        """Parse HTML standings page."""
-        soup = BeautifulSoup(html_content, "html.parser")
-        
-        # Find standings table
-        table = soup.find("table", class_="standings")
-        if table is None:
-            for t in soup.find_all("table"):
-                cls_names = " ".join(t.get("class", []))
-                if "standings" in cls_names or "result" in cls_names:
-                    table = t
-                    break
-        
-        if table is None:
-            print("✗ No standings table found in HTML")
+        if not self.problem_sources:
+            print(f"✗ Gym {self.id} has no problemSources configuration.")
             return False
 
-        # Count problems from header
-        problems = []
-        header_row = table.find("tr")
-        if header_row:
-            for th in header_row.find_all("th"):
-                # Accept both gym and contest links
-                problem_link = th.find("a", href=re.compile(r"/(gym|contest)/\d+/problem/"))
-                if problem_link:
-                    problems.append(th)
-        
-        num_problems = len(problems)
-        if num_problems == 0:
-            data_rows = table.find_all("tr")[1:]
-            if data_rows:
-                first_row = data_rows[0]
-                # Fallback: try to infer by counting from the end, assuming columns are:
-                # [#, Who, =, Penalty, A, B, C, ...]
-                # We'll detect by finding td count and subtracting known prefix columns.
-                all_tds = first_row.find_all("td")
-                if len(all_tds) >= 5:
-                    # Assume 4 non-problem columns
-                    num_problems = max(0, len(all_tds) - 4)
+        print(f"Fetching CF Gym {self.id} through the authenticated API.")
+        standings = cfapi.request(
+            "contest.standings",
+            {
+                "contestId": self.id,
+                "participantTypes": "CONTESTANT",
+            },
+            authenticated=True,
+        )
+        if not isinstance(standings, dict):
+            print(f"✗ Could not fetch Gym {self.id}.")
+            return False
+        if not self._parse_gym_standings(standings):
+            return False
+        return self._configure_source_problem_weights()
 
-        for i in range(num_problems):
-            self.numberSolved[i] = 0
+    def _parse_gym_standings(self, standings):
+        """Read solve sets from Gym common standings.
 
-        # Parse participant rows
-        participant_count = 0
-        for row in table.find_all("tr")[1:]:
-            handle = None
-            participant_cell = (
-                row.find("td", class_="standings-cell-participant")
-                or row.find("td", class_="contestant-cell")
-                or row
+        Only a party with at least one rated AC is active. Gym solve counts are
+        retained for diagnostics; problem difficulty always comes from the
+        configured source contest.
+        """
+        problems = standings.get("problems", [])
+        rows = standings.get("rows", [])
+        if not problems or not rows:
+            print(f"✗ Gym {self.id} returned empty standings.")
+            return False
+        if len(self.problem_sources) < len(problems):
+            print(
+                f"✗ Gym {self.id} has {len(problems)} problems but only "
+                f"{len(self.problem_sources)} problemSources entries."
             )
-            handle_link = participant_cell.find("a", href=re.compile(r"/profile/")) if participant_cell else None
-            if handle_link:
-                href = handle_link.get("href", "")
-                m = re.search(r"/profile/([^/?#]+)", href)
-                if m:
-                    handle = m.group(1)
-            
-            if not handle:
+            return False
+
+        problem_count = len(problems)
+        self.numberSolved = {index: 0 for index in range(problem_count)}
+        unrated_indices = {
+            index
+            for index, source in enumerate(self.problem_sources[:problem_count])
+            if source is None
+        }
+        unrated_indices.update(
+            index
+            for index, problem in enumerate(problems)
+            if "unrated" in problem.get("name", "").casefold()
+        )
+        self._scored_problem_indices = set(range(problem_count)) - unrated_indices
+        if not self._scored_problem_indices:
+            print(f"✗ Gym {self.id} has no rated problems to score.")
+            return False
+
+        configured_handles = {
+            user["codeforces-handle"].casefold(): user["codeforces-handle"]
+            for user in self.handleMap.values()
+            if user.get("codeforces-handle")
+        }
+        active_participants = 0
+
+        for row in rows:
+            solved = {
+                index
+                for index, result in enumerate(
+                    row.get("problemResults", [])[:problem_count]
+                )
+                if result.get("points", 0) > 0
+            }
+            rated_solved = solved & self._scored_problem_indices
+            if not rated_solved:
                 continue
 
-            # Determine problem cells by position: take the last num_problems td's
-            tds_in_row = row.find_all("td")
-            if not tds_in_row or num_problems == 0 or len(tds_in_row) < num_problems:
-                continue
-            problem_cells = tds_in_row[-num_problems:]
-            
-            solved_indices = []
-            for idx, td in enumerate(problem_cells[:num_problems]):
-                classes = " ".join(td.get("class", []))
-                text = td.get_text(strip=True)
+            active_participants += 1
+            for index in solved:
+                self.numberSolved[index] += 1
 
-                # Consider accepted if there is an inner element with class 'cell-accepted'
-                has_span_accepted = td.find(class_=re.compile(r"cell-accepted|accepted")) is not None
-                is_accepted = (
-                    has_span_accepted or
-                    "cell-accepted" in classes or
-                    "accepted" in classes.lower() or
-                    (text and text.startswith("+"))
+            # A team is one standings party, but every configured team member
+            # receives the team's solved set.
+            for member in row.get("party", {}).get("members", []):
+                configured = configured_handles.get(
+                    member.get("handle", "").casefold()
+                )
+                if configured is None:
+                    continue
+                previous = set(self.handlesSolved.get(configured, []))
+                self.handlesSolved[configured] = sorted(previous | rated_solved)
+
+        counts = [self.numberSolved[index] for index in range(problem_count)]
+        unrated_labels = [problems[index].get("index", str(index))
+                          for index in sorted(unrated_indices)]
+        print(
+            f"✓ Gym active participants={active_participants}, "
+            f"solved={counts}, unrated={unrated_labels}, "
+            f"matched handles={len(self.handlesSolved)}"
+        )
+        return active_participants > 0
+
+    def _configure_source_problem_weights(self):
+        source_contests = {}
+        gym_weights = {}
+        details = []
+
+        for gym_index in sorted(self._scored_problem_indices):
+            source_contest_id, source_problem_index = self.problem_sources[gym_index]
+            if source_contest_id not in source_contests:
+                distribution = self._load_source_distribution(source_contest_id)
+                if distribution is None:
+                    return False
+                participants, solved_counts = distribution
+                weights = self._normalize_source_weights(
+                    participants,
+                    solved_counts,
+                )
+                if weights is None:
+                    print(f"✗ Source contest {source_contest_id} has zero average.")
+                    return False
+                source_contests[source_contest_id] = (
+                    participants,
+                    solved_counts,
+                    weights,
                 )
 
-                if is_accepted:
-                    solved_indices.append(idx)
+            participants, solved_counts, weights = source_contests[source_contest_id]
+            if source_problem_index not in weights:
+                print(
+                    f"✗ Problem {source_contest_id}{source_problem_index} "
+                    "is absent from its source standings."
+                )
+                return False
+            gym_weights[gym_index] = weights[source_problem_index]
+            details.append(
+                f"{gym_index}:{source_contest_id}{source_problem_index}="
+                f"{solved_counts[source_problem_index]}/{participants}"
+            )
 
-            if solved_indices:
-                self.handlesSolved[handle] = solved_indices
-                participant_count += 1
-                for si in solved_indices:
-                    self.numberSolved[si] = self.numberSolved.get(si, 0) + 1
-
-        print(f"✓ Parsed {participant_count} participants, {num_problems} problems")
+        self._source_problem_weights = gym_weights
+        print("✓ Original problem distributions: " + ", ".join(details))
         return True
+
+    @staticmethod
+    def _normalize_source_weights(participants, solved_counts):
+        raw_weights = {}
+        average = 0
+        for problem_index, solved in solved_counts.items():
+            if solved <= 0:
+                raw_weights[problem_index] = 0
+                continue
+            solved_fraction = solved / participants
+            raw_weight = 1 - math.log(solved_fraction)
+            raw_weights[problem_index] = raw_weight
+            average += solved_fraction * raw_weight
+        if average <= 0:
+            return None
+        return {
+            problem_index: raw_weight / average
+            for problem_index, raw_weight in raw_weights.items()
+        }
+
+    @classmethod
+    def _load_source_distribution(cls, contest_id):
+        if contest_id in cls._source_distribution_cache:
+            return cls._source_distribution_cache[contest_id]
+
+        standings = cfapi.request(
+            "contest.standings",
+            {"contestId": contest_id},
+        )
+        if not isinstance(standings, dict):
+            print(f"✗ Could not fetch source contest {contest_id}.")
+            return None
+
+        problems = standings.get("problems", [])
+        rows = standings.get("rows", [])
+        if not problems or not rows:
+            print(f"✗ Source contest {contest_id} returned empty standings.")
+            return None
+
+        # The fixed 8.72 rule: source N contains only parties with at least one AC.
+        active_rows = [
+            row
+            for row in rows
+            if any(
+                result.get("points", 0) > 0
+                for result in row.get("problemResults", [])
+            )
+        ]
+        if not active_rows:
+            print(f"✗ Source contest {contest_id} has no active participants.")
+            return None
+
+        solved_counts = {problem["index"]: 0 for problem in problems}
+        for row in active_rows:
+            for problem, result in zip(problems, row.get("problemResults", [])):
+                if result.get("points", 0) > 0:
+                    solved_counts[problem["index"]] += 1
+
+        distribution = len(active_rows), solved_counts
+        cls._source_distribution_cache[contest_id] = distribution
+        return distribution
+
+    def getRawScore(self, handle):
+        return sum(
+            self._source_problem_weights.get(problem_index, 0)
+            for problem_index in self.handlesSolved.get(handle, [])
+        )
+
+    def getAvgScore(self):
+        # Source weights are already normalized in their original contests.
+        return 1 if self._source_problem_weights else 0

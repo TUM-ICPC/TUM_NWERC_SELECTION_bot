@@ -5,6 +5,7 @@
 chatIds.json
 .codeforces_cookies.txt
 .codeforce_config.txt
+.codeforces_api_config.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

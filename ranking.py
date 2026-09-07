@@ -1,12 +1,10 @@
-from contest import Contest
 from codeforcesContest import CodeforcesContest
 from atcoderContest import AtcoderContest
 from contestDates import ContestDates
 from util import Table
 import time
-import datetime
+from datetime import datetime
 
-import codeforcesApi as cfapi
 from codeforcesGymContest import CodeforcesGymContest
 
 class Ranking:
@@ -14,23 +12,17 @@ class Ranking:
     self.conf = config
     self.contestObjList = []  # Contains only past or started contest objects
     self.contestDateList = []  # Contains past and future contest dates
-    self.specialContestObjList = []  # Special four contests (past only objects)
+    self.onsiteContestObjList = []
     self.handleMap = config['users']
-    self.startDate = config['startDate']
-    self.endDate = config['endDate']
-    self.startDate_onsite = config['startDate_onsite']
-    self.endDate_onsite = config['endDate_onsite']
     
     # Scoring parameters
     self.BASELINE_TOP_K = 4  # Best 4 from last 12 baseline contests
-    self.SPECIAL_TOP_K = 2   # Best 2 from 4 special contests
-    self.SPECIAL_MULTIPLIER = 2  # Special contest score multiplier
+    self.ONSITE_TOP_K = 2
+    self.ONSITE_MULTIPLIER = 2
     
   def updateConfig(self, config):
     self.conf = config
     self.handleMap = config['users']
-    self.startDate = config['startDate']
-    self.endDate = config['endDate']
 
   def getRanking(self):
     return self.ranking
@@ -42,10 +34,9 @@ class Ranking:
     return self.contestDateList
 
   def getContestNames(self):
-    # Return all contest names: baseline + special contests
     baseline_names = [c.name for c in self.contestObjList]
-    special_names = [c.name for c in self.specialContestObjList]
-    return baseline_names + special_names
+    onsite_names = [c.name for c in self.onsiteContestObjList]
+    return baseline_names + onsite_names
 
   def updateDates(self):
     self.contestDateList = []
@@ -56,14 +47,18 @@ class Ranking:
     self.calcStandings()
 
   def fetchContests(self):
-    self.contestDates = ContestDates(self.conf)
-    newContestDates = self.contestDates.getDates()
+    baseline_dates = ContestDates(self.conf).getDates()
+    onsite_dates = self._build_onsite_contest_dates()
+    self.contestDateList = sorted(
+      baseline_dates + onsite_dates,
+      key=lambda contest: contest['time'],
+    )
+
     AtcoderContest.initSession()
-    if newContestDates != self.contestDates:
-      self.contestDateList = newContestDates
+    try:
       self.contestObjList = []
-      self.specialContestObjList = []
-      for date in self.contestDateList:
+      self.onsiteContestObjList = []
+      for date in baseline_dates:
         if date['time'] > time.time():
           continue
         if date['type'] == 'atcoder':
@@ -73,19 +68,20 @@ class Ranking:
       # Keep only the last 12 baseline contests
       if len(self.contestObjList) > 12:
         self.contestObjList = self.contestObjList[-12:]
-      # Integrate special contests (outside of config window)
-      for sdate in self._build_special_contest_dates():
+
+      for sdate in onsite_dates:
         if sdate['time'] > time.time():
           continue
-        cobj = self._make_special_contest_obj(sdate)
+        cobj = self._make_onsite_contest_obj(sdate)
         if cobj is not None:
-          self.specialContestObjList.append(cobj)
-    AtcoderContest.endSession()
+          self.onsiteContestObjList.append(cobj)
+    finally:
+      AtcoderContest.endSession()
 
   def calcStandings(self):
     self.names = self.handleMap.keys()
     self.ranking = []
-    self.specialScores = {}
+    self.onsiteScores = {}
 
     for name in self.names:
       # Baseline contest scores
@@ -93,45 +89,41 @@ class Ranking:
       for c in self.contestObjList:
         currentNameScores.append(c.getScore(name))
       
-      # Special contest scores (original normalized)
-      sscores = []
-      for c in self.specialContestObjList:
-        sscores.append(c.getScore(name))
+      # Onsite Gym scores (already normalized in the source contests)
+      onsite_scores = []
+      for c in self.onsiteContestObjList:
+        onsite_scores.append(c.getScore(name))
       
-      # Special contest display scores (multiplied by SPECIAL_MULTIPLIER)
-      sscores_display = [s * self.SPECIAL_MULTIPLIER for s in sscores]
+      # Onsite scores are worth twice a baseline contest score.
+      onsite_display = [s * self.ONSITE_MULTIPLIER for s in onsite_scores]
       
-      # Combine for table display (baseline + special display scores)
-      allScores = currentNameScores + sscores_display
+      allScores = currentNameScores + onsite_display
       self.ranking.append(allScores)
-      # Save original special scores for sorting calculation
-      self.specialScores[name] = sscores
+      self.onsiteScores[name] = onsite_scores
 
   def sortingKey(self, scores, name=None):
     """
     Calculate total score for sorting:
     1. Best 4 from baseline contests (first N contests)
-    2. Best 2 from special contests × 2
+    2. Best 2 from configured onsite Gym contests × 2
     
-    Note: scores contains display values where special contest scores
-    are already multiplied by 2, so we use saved specialScores for calculation.
+    Note: scores contains display values where onsite scores are already
+    multiplied by 2, so sorting uses the saved original onsite scores.
     """
-    # Separate baseline and special contest scores
+    # Separate baseline scores from the appended onsite display scores.
     num_baseline = len(self.contestObjList)
     baseline_scores = scores[:num_baseline] if len(scores) >= num_baseline else scores
     
-    # Use saved original special scores (not multiplied) for sorting
-    special_scores = self.specialScores.get(name, [])
+    onsite_scores = self.onsiteScores.get(name, [])
     
     # Baseline: sum of best 4
     baseline_sorted = sorted(baseline_scores, reverse=True)
     baseline_sum = sum(baseline_sorted[:self.BASELINE_TOP_K])
     
-    # Special bonus: sum of best 2 × 2
-    special_sorted = sorted(special_scores, reverse=True)
-    special_bonus = sum(special_sorted[:self.SPECIAL_TOP_K]) * self.SPECIAL_MULTIPLIER
+    onsite_sorted = sorted(onsite_scores, reverse=True)
+    onsite_bonus = sum(onsite_sorted[:self.ONSITE_TOP_K]) * self.ONSITE_MULTIPLIER
     
-    total = baseline_sum + special_bonus
+    total = baseline_sum + onsite_bonus
     return total
 
   def getTable(self) -> Table:
@@ -148,98 +140,66 @@ class Ranking:
     table.sort()
     return table
 
-  # -------------------- Helpers for special contests --------------------
-  def _build_special_contest_dates(self):
-    """
-    Create the four special contests AFTER baseline period.
-    These are onsite/special contests outside the baseline time window:
-    - 2025-10-18 (yesterday): Gym 643235 (friends standings, official Edu 817 distribution)
-    - 2025-10-19 (today): regular CF Div.2 (auto-resolve id)
-    - next Saturday: gym clone (id unknown), will be ignored until known
-    - next Sunday: regular CF Div.2 (auto)
-    Returns list of dicts with fields: {time, type, id?, hint}
-    type in { 'cf_gym', 'cf_div2_auto' }
-    """
-    # Fixed timestamps for onsite special contests (outside baseline window)
-    # Yesterday: Gym at midday
-    yesterday = datetime.datetime(2025, 10, 18, 12, 0, 0)
-    # Today: Div.2 at expected time (typically 14:35 UTC for CF)
-    today = datetime.datetime(2025, 10, 19, 14, 35, 0)
-    
-    # Future placeholders
-    now = datetime.datetime.now()
-    def next_weekday(d: datetime.datetime, weekday: int):
-      days_ahead = (weekday - d.weekday() + 7) % 7
-      if days_ahead == 0:
-        days_ahead = 7
-      return d + datetime.timedelta(days=days_ahead)
-    
-    next_saturday = datetime.datetime.combine(
-      next_weekday(now, 5).date(),
-      datetime.time(12, 0, 0)
-    )
-    next_sunday = datetime.datetime.combine(
-      next_weekday(now, 6).date(),
-      datetime.time(14, 35, 0)
-    )
+  # -------------------- Onsite Gym configuration --------------------
+  def _build_onsite_contest_dates(self):
+    """Validate and normalize ``config.json``'s ``onsiteGyms`` list."""
+    configured = self.conf.get('onsiteGyms', [])
+    if not isinstance(configured, list):
+      raise ValueError("config.json: onsiteGyms must be a list")
 
-    def ts(d: datetime.datetime):
-      return d.timestamp()
+    onsite_dates = []
+    seen_ids = set()
+    for index, gym in enumerate(configured):
+      location = f"config.json: onsiteGyms[{index}]"
+      if not isinstance(gym, dict):
+        raise ValueError(f"{location} must be an object")
 
-    specials = [
-      {"time": ts(yesterday), "type": "cf_gym", "id": 643235, "hint": "yesterday_gym_friends"},
-      {"time": ts(today), "type": "cf_div2_auto", "id": None, "hint": "today_div2"},
-      {"time": ts(next_saturday), "type": "cf_gym", "id": None, "hint": "next_saturday_gym_clone"},
-      {"time": ts(next_sunday), "type": "cf_div2_auto", "id": None, "hint": "next_sunday_div2"},
-    ]
-    return specials
+      contest_id = gym.get('id')
+      if isinstance(contest_id, bool) or not isinstance(contest_id, int) or contest_id <= 0:
+        raise ValueError(f"{location}.id must be a positive integer")
+      if contest_id in seen_ids:
+        raise ValueError(f"{location}.id duplicates Gym {contest_id}")
+      seen_ids.add(contest_id)
 
-  def _make_special_contest_obj(self, sdate):
-    """Instantiate a Contest object for a special contest date (past only)."""
-    stype = sdate.get('type')
-    cid = sdate.get('id')
-    hint = sdate.get('hint', '')
-    
-    if stype == 'cf_gym':
-      if cid is None:
-        return None
-      obj = CodeforcesGymContest(cid, self.handleMap)
-      # Yesterday's gym uses friends standings HTML + official Edu 817 distribution
-      if hint == 'yesterday_gym_friends':
-        obj._offline_html_path = 'cf817_friends_standings.html'
-        obj._display_name = 'Gym'
-        obj._reference_contest_id = 817
-      return obj
-    
-    if stype == 'cf_div2_auto':
-      # Auto-resolve Div.2 contest id near scheduled time
-      rid = self._resolve_div2_id(around_ts=sdate['time'])
-      if rid is None:
-        return None
-      return CodeforcesContest(rid, self.handleMap)
-    
-    return None
+      start_time = gym.get('startTime')
+      if not isinstance(start_time, str):
+        raise ValueError(f"{location}.startTime must be an ISO-8601 string")
+      try:
+        parsed_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+      except ValueError as error:
+        raise ValueError(f"{location}.startTime is invalid: {start_time}") from error
+      if parsed_time.tzinfo is None:
+        raise ValueError(f"{location}.startTime must include a timezone")
 
-  def _resolve_div2_id(self, around_ts: float, tolerance_hours: int = 18):
-    """
-    Use Codeforces API to locate a regular Div. 2 contest near the given timestamp.
-    Returns contest id or None.
-    """
-    contests = cfapi.request('contest.list', {'gym': 'false'})
-    if contests is False or contests is None:
+      problem_sources = gym.get('problemSources')
+      if not isinstance(problem_sources, list) or not problem_sources:
+        raise ValueError(f"{location}.problemSources must be a non-empty list")
+      try:
+        CodeforcesGymContest.parse_problem_sources(problem_sources)
+      except ValueError as error:
+        raise ValueError(f"{location}: {error}") from error
+
+      display_name = gym.get('displayName', f"Gym{contest_id}")
+      if not isinstance(display_name, str) or not display_name.strip():
+        raise ValueError(f"{location}.displayName must be a non-empty string")
+
+      onsite_dates.append({
+        'time': parsed_time.timestamp(),
+        'type': 'cf_gym',
+        'id': contest_id,
+        'display_name': display_name.strip(),
+        'problem_sources': problem_sources,
+      })
+
+    return sorted(onsite_dates, key=lambda contest: contest['time'])
+
+  def _make_onsite_contest_obj(self, sdate):
+    """Instantiate one configured onsite Gym."""
+    if sdate.get('type') != 'cf_gym':
       return None
-    lo = around_ts - tolerance_hours * 3600
-    hi = around_ts + tolerance_hours * 3600
-    candidates = []
-    for c in contests:
-      st = c.get('startTimeSeconds')
-      name = c.get('name', '')
-      if st is None:
-        continue
-      if lo <= st <= hi and ('Div. 2' in name) and ('unrated' not in name.lower()):
-        candidates.append(c)
-    if not candidates:
-      return None
-    # Pick the closest in time
-    candidates.sort(key=lambda c: abs(c['startTimeSeconds'] - around_ts))
-    return candidates[0]['id']
+    return CodeforcesGymContest(
+      sdate['id'],
+      self.handleMap,
+      problem_sources=sdate['problem_sources'],
+      display_name=sdate['display_name'],
+    )

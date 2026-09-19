@@ -18,7 +18,7 @@ def getName(name):
 		return "Edu" + getLongestNum(name)
 	elif "Global" in name:
 		return "Glo" + getLongestNum(name)
-	elif "Div. 1" in name or "Div. 2" in name:
+	elif "Div. 1" in name or "Div. 2" in name or "Div. 3" in name:
 		return "CF" + getLongestNum(name)
 	elif name == "Grakn Forces 2020":
 		return "Grakn"

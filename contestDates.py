@@ -13,7 +13,7 @@ def getTimestamp(dateString) -> float:
 # also allows Div. 1 contest, need to be filtered afterwards
 # if Div. 2 is also present
 def isValidCFContestName(name):
-	return not "unrated" in name and ("Educational" in name or "Global" in name or "Div. 2" in name)
+	return not "unrated" in name and ("Educational" in name or "Global" in name or "Div. 2" in name or "Div. 3" in name)
 
 class ContestDates:
 	def __init__(self, config):
@@ -27,36 +27,36 @@ class ContestDates:
 			return []
 		contests = [c for c in contests if c.get('startTimeSeconds', -1) >= start]
 		contests = [c for c in contests if c.get('startTimeSeconds', -1) <= end]
-		addContestIds = [2022, 2027, 2030]
+		addContestIds = []
 		filteredcontests = [c for c in contests if isValidCFContestName(c['name']) or c['id'] in addContestIds]
 		filteredcontests = [c for c in filteredcontests if len(
 				[c2 for c2 in contests if c2.get('startTimeSeconds', -1) == c.get('startTimeSeconds', -1)]) == 1 or c['id'] in addContestIds]
 		return [{		"time": c['startTimeSeconds'],
 								"type": "codeforces",
 								"id": 	c["id"]} for c in filteredcontests]
-	
-	
+
+
 
 	def getACContests(self, start, end):
-        # atcoder grand contest archive
+		# atcoder grand contest archive
 		# request = requests.get("https://atcoder.jp/contests/archive?category=1")
 		# html = request.text
 		# parsed = BeautifulSoup(html, "html.parser")
 		# contests = self.parseACTable(parsed.find('table'), start, end)
 
-        # atcoder regular contest archive
-		request = requests.get("https://atcoder.jp/contests/archive?ratedType=2&category=0&keyword=Div.+2")
+		# atcoder regular contest archive
+		request = requests.get("https://atcoder.jp/contests/archive?ratedType=2&category=0&keyword=")
 		html = request.text
 		parsed = BeautifulSoup(html, "html.parser")
 		contests = self.parseACTable(parsed.find('table'), start, end)
-  
-		# atcoder beginner contest archive
-  		# request = requests.get("https://atcoder.jp/contests/archive?ratedType=1") 
-		# html = request.text
-		# parsed = BeautifulSoup(html, "html.parser")
-		# contests += self.parseACTable(parsed.find('table'), start, end)
 
-        # atcoder current and future contests
+		# atcoder beginner contest archive
+		request = requests.get("https://atcoder.jp/contests/archive?ratedType=1&category=0&keyword=") 
+		html = request.text
+		parsed = BeautifulSoup(html, "html.parser")
+		contests += self.parseACTable(parsed.find('table'), start, end)
+
+		# atcoder current and future contests
 		request = requests.get("https://atcoder.jp/contests/")
 		html = request.text
 		parsed = BeautifulSoup(html, "html.parser")
@@ -138,16 +138,11 @@ class ContestDates:
 			title = a_contest.get_text(" ", strip=True)
 
 			path = urlparse(contestUrl).path.lower()  # e.g. '/contests/arc206'
-			if not re.fullmatch(r'/contests/arc\d+/?', path):
-				continue
-
-			if not re.search(r'\(Div\.\s*2\)', title, re.I):
-				continue
-			if re.search(r'Div\.\s*1', title, re.I):
+			if not re.fullmatch(r'/contests/a[rb]c\d+/?', path):
 				continue
 
 			if start <= timeStmp <= end:
-				contestId = re.search(r'arc\d+', path).group()  # e.g. 'arc206'
+				contestId = re.search(r'a[rb]c\d+', path).group()  # e.g. 'arc206'
 				contests.append({
 					'time': timeStmp,
 					'type': 'atcoder',

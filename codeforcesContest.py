@@ -5,7 +5,7 @@ import re
 
 
 # user.status is shared by every CodeforcesContest object in one bot process.
-# Keeping only the normalized OOC solves makes later contests cheap to query.
+# Cache normalized contest solves so later contests are cheap to query.
 _user_status_cache = {}
 _USER_STATUS_PAGE_SIZE = 1000
 
@@ -42,7 +42,11 @@ class CodeforcesContest(Contest):
 		self._official_handle_lookup = {}
 		self._problem_index_lookup = {}
 		self._contest_start_time = 0
-		cfStandings = cfApi.request("contest.standings", {"contestId": self.id})
+		cfStandings = cfApi.request(
+			"contest.standings",
+			{"contestId": self.id},
+			authenticated=False,
+		)
 		if cfStandings is False:
 			print(f"[WARN] Codeforces standings unavailable for contest {self.id}; using 0 scores.")
 			return False
@@ -77,16 +81,12 @@ class CodeforcesContest(Contest):
 		return True
 
 	def getRawScore(self, handle: str) -> float:
-		"""Score official and OOC participants against the official distribution."""
+		"""Score contestant and OOC solves from user.status."""
 		participants = len(self.handlesSolved)
 		if participants == 0:
 			return 0
 
-		official_handle = self._official_handle_lookup.get(handle.casefold())
-		if official_handle is not None:
-			solved_indices = self.handlesSolved.get(official_handle, [])
-		else:
-			solved_indices = self._get_ooc_solved_indices(handle)
+		solved_indices = self._get_indices(handle)
 
 		score = 0
 		for task_index in solved_indices:
@@ -97,8 +97,11 @@ class CodeforcesContest(Contest):
 			score += 1 - math.log(solved_fraction)
 		return score
 
-	def _get_ooc_solved_indices(self, handle):
-		cache_key = handle.casefold()
+
+	def _get_indices(self, handle):
+		# A distinct key prevents an older OOC-only cache from masking contestant
+		# submissions after changing the participant-type filter.
+		cache_key = f"all-participant-types:{handle.casefold()}"
 		entry = _user_status_cache.setdefault(
 			cache_key,
 			{
@@ -106,7 +109,7 @@ class CodeforcesContest(Contest):
 				"oldest_time": None,
 				"exhausted": False,
 				"failed": False,
-				"ooc_solves": {},
+				"solves": {},
 			},
 		)
 
@@ -139,7 +142,7 @@ class CodeforcesContest(Contest):
 						entry["oldest_time"] = min(entry["oldest_time"], creation_time)
 
 				author = submission.get("author", {})
-				if author.get("participantType") != "OUT_OF_COMPETITION":
+				if author.get("participantType") not in ("CONTESTANT", "OUT_OF_COMPETITION"):
 					continue
 				if submission.get("verdict") != "OK":
 					continue
@@ -148,7 +151,7 @@ class CodeforcesContest(Contest):
 				problem_index = submission.get("problem", {}).get("index")
 				if contest_id is None or problem_index is None:
 					continue
-				entry["ooc_solves"].setdefault(str(contest_id), set()).add(problem_index)
+				entry["solves"].setdefault(str(contest_id), set()).add(problem_index)
 
 			entry["next_from"] += len(submissions)
 			if len(submissions) < _USER_STATUS_PAGE_SIZE:
@@ -159,6 +162,6 @@ class CodeforcesContest(Contest):
 
 		return sorted(
 			self._problem_index_lookup[index]
-			for index in entry["ooc_solves"].get(str(self.id), set())
+			for index in entry["solves"].get(str(self.id), set())
 			if index in self._problem_index_lookup
 		)

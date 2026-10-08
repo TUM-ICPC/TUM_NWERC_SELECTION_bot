@@ -9,6 +9,7 @@ class Contest(ABC):
 	numberSolved = None	# {<int>: <int>} taskId -> number of people who solved it
 	handleString = "" 	# ∈ {"codefores-handle", "atcoder-handle"}
 	handleMap = None 		# {"clear-name": {"codforces-handle": …, "atc.h":…} }
+ 
 	def __init__(self, id, handleMap):
 		self.handleMap = handleMap
 		self.id = id

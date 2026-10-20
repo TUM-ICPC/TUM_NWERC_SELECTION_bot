@@ -141,8 +141,10 @@ class ContestDates:
 			if not re.fullmatch(r'/contests/a[rb]c\d+/?', path):
 				continue
 
-			if start <= timeStmp <= end:
-				contestId = re.search(r'a[rb]c\d+', path).group()  # e.g. 'arc206'
+			addContestIds = []
+			contestId = re.search(r'a[rb]c\d+', path).group()  # e.g. 'arc206'
+
+			if start <= timeStmp <= end or contestId in addContestIds:
 				contests.append({
 					'time': timeStmp,
 					'type': 'atcoder',

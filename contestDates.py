@@ -25,7 +25,7 @@ class ContestDates:
 		contests = cfapi.request('contest.list', {'gym':'false'})
 		if contests is False:
 			return []
-		addContestIds = [2261]
+		addContestIds = [2261, 2277]
 		contests = [c for c in contests if c.get('startTimeSeconds', -1) >= start or c['id'] in addContestIds]
 		contests = [c for c in contests if c.get('startTimeSeconds', -1) <= end or c['id'] in addContestIds]
 		filteredcontests = [c for c in contests if isValidCFContestName(c['name']) or c['id'] in addContestIds]

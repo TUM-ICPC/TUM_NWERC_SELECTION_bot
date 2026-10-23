@@ -9,6 +9,10 @@ import re
 _user_status_cache = {}
 _USER_STATUS_PAGE_SIZE = 1000
 
+def clear_user_status_cache():
+	"""Start a ranking refresh with fresh submissions for every handle."""
+	_user_status_cache.clear()
+
 def getLongestNum(name):
 	numbers = re.findall(r"\d+", name)
 	return max(numbers, key=len) if numbers else "???"
@@ -27,12 +31,15 @@ def getName(name):
 
 class CodeforcesContest(Contest):
 
-	def __init__(self, id, handleMap):
+	def __init__(self, id, handleMap, display_name=None):
+		self.display_name = display_name
 		self.handleString = "codeforces-handle"
 		self._official_handle_lookup = {}
 		self._problem_index_lookup = {}
 		self._contest_start_time = 0
 		super().__init__(id, handleMap)
+		if display_name:
+			self.name = display_name
 
 	def updateScores(self):
 		print("fetching scores for CF contest ", self.id)
@@ -50,7 +57,7 @@ class CodeforcesContest(Contest):
 		if cfStandings is False:
 			print(f"[WARN] Codeforces standings unavailable for contest {self.id}; using 0 scores.")
 			return False
-		self.name = getName(cfStandings["contest"]["name"])
+		self.name = self.display_name or getName(cfStandings["contest"]["name"])
 		self._contest_start_time = cfStandings["contest"].get("startTimeSeconds", 0)
 		self._problem_index_lookup = {
 			problem["index"]: i

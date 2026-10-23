@@ -1,4 +1,4 @@
-from codeforcesContest import CodeforcesContest
+from codeforcesContest import CodeforcesContest, clear_user_status_cache
 from atcoderContest import AtcoderContest
 from contestDates import ContestDates
 from util import Table
@@ -16,7 +16,7 @@ class Ranking:
     self.handleMap = config['users']
     
     # Scoring parameters
-    self.BASELINE_TOP_K = 4  # Best 4 from last 12 baseline contests
+    self.BASELINE_TOP_K = 4  # Best 4 from all baseline contests in the date range
     self.ONSITE_TOP_K = 2
     self.ONSITE_MULTIPLIER = 2
     
@@ -49,6 +49,11 @@ class Ranking:
   def fetchContests(self):
     baseline_dates = ContestDates(self.conf).getDates()
     onsite_dates = self._build_onsite_contest_dates()
+    onsite_cf_ids = {c['id'] for c in onsite_dates if c['type'] == 'codeforces'}
+    baseline_dates = [
+      c for c in baseline_dates
+      if c['type'] != 'codeforces' or c['id'] not in onsite_cf_ids
+    ]
     self.contestDateList = sorted(
       baseline_dates + onsite_dates,
       key=lambda contest: contest['time'],
@@ -65,10 +70,6 @@ class Ranking:
           self.contestObjList.append(AtcoderContest(date['id'], self.handleMap))
         else:
           self.contestObjList.append(CodeforcesContest(date['id'], self.handleMap))
-      # Keep only the last 12 baseline contests
-      if len(self.contestObjList) > 12:
-        self.contestObjList = self.contestObjList[-12:]
-
       for sdate in onsite_dates:
         if sdate['time'] > time.time():
           continue
@@ -79,6 +80,7 @@ class Ranking:
       AtcoderContest.endSession()
 
   def calcStandings(self):
+    clear_user_status_cache()
     self.names = self.handleMap.keys()
     self.ranking = []
     self.onsiteScores = {}
@@ -89,7 +91,7 @@ class Ranking:
       for c in self.contestObjList:
         currentNameScores.append(c.getScore(name))
       
-      # Onsite Gym scores (already normalized in the source contests)
+      # Onsite scores (Gym problems are normalized in their source contests)
       onsite_scores = []
       for c in self.onsiteContestObjList:
         onsite_scores.append(c.getScore(name))
@@ -105,7 +107,7 @@ class Ranking:
     """
     Calculate total score for sorting:
     1. Best 4 from baseline contests (first N contests)
-    2. Best 2 from configured onsite Gym contests × 2
+    2. Best 2 from configured onsite contests × 2
     
     Note: scores contains display values where onsite scores are already
     multiplied by 2, so sorting uses the saved original onsite scores.
@@ -140,7 +142,7 @@ class Ranking:
     table.sort()
     return table
 
-  # -------------------- Onsite Gym configuration --------------------
+  # -------------------- Onsite contest configuration --------------------
   def _build_onsite_contest_dates(self):
     """Validate and normalize ``config.json``'s ``onsiteGyms`` list."""
     configured = self.conf.get('onsiteGyms', [])
@@ -153,6 +155,12 @@ class Ranking:
       location = f"config.json: onsiteGyms[{index}]"
       if not isinstance(gym, dict):
         raise ValueError(f"{location} must be an object")
+
+      enabled = gym.get('enabled', True)
+      if not isinstance(enabled, bool):
+        raise ValueError(f"{location}.enabled must be a boolean")
+      if not enabled:
+        continue
 
       contest_id = gym.get('id')
       if isinstance(contest_id, bool) or not isinstance(contest_id, int) or contest_id <= 0:
@@ -171,11 +179,18 @@ class Ranking:
       if parsed_time.tzinfo is None:
         raise ValueError(f"{location}.startTime must include a timezone")
 
+      contest_type = gym.get('type', 'cf_gym')
+      if contest_type not in ('cf_gym', 'codeforces'):
+        raise ValueError(f"{location}.type must be cf_gym or codeforces")
+      group_code = gym.get('groupCode')
+      if group_code is not None and (not isinstance(group_code, str) or not group_code.strip()):
+        raise ValueError(f"{location}.groupCode must be a non-empty string")
       problem_sources = gym.get('problemSources')
-      if not isinstance(problem_sources, list) or not problem_sources:
+      if contest_type == 'cf_gym' and (not isinstance(problem_sources, list) or not problem_sources):
         raise ValueError(f"{location}.problemSources must be a non-empty list")
       try:
-        CodeforcesGymContest.parse_problem_sources(problem_sources)
+        if contest_type == 'cf_gym':
+          CodeforcesGymContest.parse_problem_sources(problem_sources)
       except ValueError as error:
         raise ValueError(f"{location}: {error}") from error
 
@@ -185,16 +200,21 @@ class Ranking:
 
       onsite_dates.append({
         'time': parsed_time.timestamp(),
-        'type': 'cf_gym',
+        'type': contest_type,
         'id': contest_id,
         'display_name': display_name.strip(),
         'problem_sources': problem_sources,
+        'group_code': group_code.strip() if group_code else None,
       })
 
     return sorted(onsite_dates, key=lambda contest: contest['time'])
 
   def _make_onsite_contest_obj(self, sdate):
-    """Instantiate one configured onsite Gym."""
+    """Instantiate one configured onsite contest with its table column name."""
+    if sdate.get('type') == 'codeforces':
+      return CodeforcesContest(
+        sdate['id'], self.handleMap, display_name=sdate['display_name'],
+      )
     if sdate.get('type') != 'cf_gym':
       return None
     return CodeforcesGymContest(
@@ -202,4 +222,5 @@ class Ranking:
       self.handleMap,
       problem_sources=sdate['problem_sources'],
       display_name=sdate['display_name'],
+      group_code=sdate.get('group_code'),
     )

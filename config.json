@@ -15,6 +15,7 @@
     {
       "id": 724795,
       "startTime": "2026-10-18T16:35:00+02:00",
+      "displayName": "onsite",
       "problemSources": [
         {"contestId": 884, "problem": "A"},
         {"contestId": 884, "problem": "B"},

@@ -55,14 +55,14 @@ def updateUpcomingContest():
   ranking.updateDates()
 
 def updateConfig():
-  config = util.readConfigOffline()
+  config = util.readConfig()
   ranking.updateConfig(config)
 
 def mainLoop():
   global config
   global ranking
   global chatIds
-  config = util.readConfigOffline()
+  config = util.readConfig()
   ranking = Ranking(config)
   chatIds = util.readChatIds()
 

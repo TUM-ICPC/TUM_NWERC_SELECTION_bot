@@ -3,7 +3,7 @@ from pytz import timezone
 import requests
 
 def readConfig():
-  myurl = "https://raw.githubusercontent.com/florianjuengermann/tum-nwerc-selection/master/config.json"
+  myurl = "https://raw.githubusercontent.com/TUM-ICPC/TUM_NWERC_SELECTION_bot/refs/heads/main/config.json"
   resp = requests.get(myurl)
   return json.loads(resp.content)
 

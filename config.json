@@ -8,6 +8,11 @@
   },
   "onsiteGyms": [
     {
+      "id": 2261,
+      "type": "codeforces",
+      "startTime": "2026-10-17T16:35:00+02:00"
+    },
+    {
       "id": 724795,
       "startTime": "2026-10-18T16:35:00+02:00",
       "problemSources": [
@@ -18,6 +23,11 @@
         {"contestId": 884, "problem": "E"},
         {"contestId": 884, "problem": "F"}
       ]
+    },
+    {
+      "id": 2277,
+      "type": "codeforces",
+      "startTime": "2026-10-24T13:05:00+02:00"
     }
   ],
   "users": {

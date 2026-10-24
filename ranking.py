@@ -49,6 +49,11 @@ class Ranking:
   def fetchContests(self):
     baseline_dates = ContestDates(self.conf).getDates()
     onsite_dates = self._build_onsite_contest_dates()
+    onsite_keys = {(date['type'], date['id']) for date in onsite_dates}
+    baseline_dates = [
+      date for date in baseline_dates
+      if (date['type'], date['id']) not in onsite_keys
+    ]
     self.contestDateList = sorted(
       baseline_dates + onsite_dates,
       key=lambda contest: contest['time'],
@@ -89,7 +94,7 @@ class Ranking:
       for c in self.contestObjList:
         currentNameScores.append(c.getScore(name))
       
-      # Onsite Gym scores (already normalized in the source contests)
+      # Onsite scores use each contest's existing normalization.
       onsite_scores = []
       for c in self.onsiteContestObjList:
         onsite_scores.append(c.getScore(name))
@@ -105,7 +110,7 @@ class Ranking:
     """
     Calculate total score for sorting:
     1. Best 4 from baseline contests (first N contests)
-    2. Best 2 from configured onsite Gym contests × 2
+    2. Best 2 from configured onsite contests × 2
     
     Note: scores contains display values where onsite scores are already
     multiplied by 2, so sorting uses the saved original onsite scores.
@@ -140,7 +145,7 @@ class Ranking:
     table.sort()
     return table
 
-  # -------------------- Onsite Gym configuration --------------------
+  # -------------------- Onsite configuration --------------------
   def _build_onsite_contest_dates(self):
     """Validate and normalize ``config.json``'s ``onsiteGyms`` list."""
     configured = self.conf.get('onsiteGyms', [])
@@ -161,6 +166,10 @@ class Ranking:
         raise ValueError(f"{location}.id duplicates Gym {contest_id}")
       seen_ids.add(contest_id)
 
+      contest_type = gym.get('type', 'cf_gym')
+      if contest_type not in ('cf_gym', 'codeforces'):
+        raise ValueError(f"{location}.type must be 'cf_gym' or 'codeforces'")
+
       start_time = gym.get('startTime')
       if not isinstance(start_time, str):
         raise ValueError(f"{location}.startTime must be an ISO-8601 string")
@@ -171,30 +180,36 @@ class Ranking:
       if parsed_time.tzinfo is None:
         raise ValueError(f"{location}.startTime must include a timezone")
 
-      problem_sources = gym.get('problemSources')
-      if not isinstance(problem_sources, list) or not problem_sources:
-        raise ValueError(f"{location}.problemSources must be a non-empty list")
-      try:
-        CodeforcesGymContest.parse_problem_sources(problem_sources)
-      except ValueError as error:
-        raise ValueError(f"{location}: {error}") from error
+      problem_sources = None
+      display_name = None
+      if contest_type == 'cf_gym':
+        problem_sources = gym.get('problemSources')
+        if not isinstance(problem_sources, list) or not problem_sources:
+          raise ValueError(f"{location}.problemSources must be a non-empty list")
+        try:
+          CodeforcesGymContest.parse_problem_sources(problem_sources)
+        except ValueError as error:
+          raise ValueError(f"{location}: {error}") from error
 
-      display_name = gym.get('displayName', f"Gym{contest_id}")
-      if not isinstance(display_name, str) or not display_name.strip():
-        raise ValueError(f"{location}.displayName must be a non-empty string")
+        display_name = gym.get('displayName', f"Gym{contest_id}")
+        if not isinstance(display_name, str) or not display_name.strip():
+          raise ValueError(f"{location}.displayName must be a non-empty string")
+        display_name = display_name.strip()
 
       onsite_dates.append({
         'time': parsed_time.timestamp(),
-        'type': 'cf_gym',
+        'type': contest_type,
         'id': contest_id,
-        'display_name': display_name.strip(),
+        'display_name': display_name,
         'problem_sources': problem_sources,
       })
 
     return sorted(onsite_dates, key=lambda contest: contest['time'])
 
   def _make_onsite_contest_obj(self, sdate):
-    """Instantiate one configured onsite Gym."""
+    """Instantiate one configured onsite round or Gym."""
+    if sdate.get('type') == 'codeforces':
+      return CodeforcesContest(sdate['id'], self.handleMap)
     if sdate.get('type') != 'cf_gym':
       return None
     return CodeforcesGymContest(

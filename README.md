@@ -44,6 +44,10 @@ Once a Gym is known, add one entry:
 ```
 
 - `id` is the Gym ID.
+- For a regular Codeforces round used as an onsite contest, set `type` to
+  `"codeforces"` and omit `problemSources`. It keeps its normal contest name
+  and scoring formula, receives the onsite multiplier of two, and is excluded
+  from the baseline contests. Entries without `type` continue to use Gym scoring.
 - `startTime` is an ISO-8601 timestamp with a timezone. `Z` may be used for UTC.
 - `displayName` is the table column name.
 - `problemSources` follows the exact Gym problem order. Each rated problem maps

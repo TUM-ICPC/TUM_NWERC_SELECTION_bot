@@ -120,6 +120,9 @@ class CodeforcesGymContest(Contest):
         active_participants = 0
 
         for row in rows:
+            # Mashup standings can include rows from the original contest.
+            if row.get("party", {}).get("contestId", self.id) != self.id:
+                continue
             solved = {
                 index
                 for index, result in enumerate(

@@ -1,10 +1,9 @@
 from bs4 import BeautifulSoup
 import codeforcesApi as cfapi
-import time, requests
+import requests
 import util
 import re
 from datetime import datetime
-from pytz import timezone
 from urllib.parse import urlparse
 
 def getTimestamp(dateString) -> float:
@@ -35,15 +34,7 @@ class ContestDates:
 								"type": "codeforces",
 								"id": 	c["id"]} for c in filteredcontests]
 
-
-
 	def getACContests(self, start, end):
-		# atcoder grand contest archive
-		# request = requests.get("https://atcoder.jp/contests/archive?category=1")
-		# html = request.text
-		# parsed = BeautifulSoup(html, "html.parser")
-		# contests = self.parseACTable(parsed.find('table'), start, end)
-
 		# atcoder regular contest archive
 		request = requests.get("https://atcoder.jp/contests/archive?ratedType=2&category=0&keyword=")
 		html = request.text
@@ -74,33 +65,6 @@ class ContestDates:
 			currentTable = curTabl1.find('table')
 			contests += self.parseACTable(currentTable, start, end)
 		return contests
-	
-# 	def parseACTable(self, table, start, end):
-# 		rows = table.find('tbody').find_all('tr')
-# 		contests = []
-# 		for row in rows:
-# 			values = row.find_all('td')
-# 			timeUrl = values[0].find('a').get('href')
-# 			timestr = re.search('[0-9]+T[0-9]*', timeUrl).group()
-# 			japanTime = datetime.strptime(timestr, "%Y%m%dT%H%M")
-# 			utcTime = util.convertTimeZone(japanTime, "Asia/Tokyo", "Europe/Berlin")
-# 			timeStmp = datetime.timestamp(utcTime)
-# 			contestUrl = values[1].find('a').get('href')
-# 			contestRegex = re.search('arc [0-9]*', contestUrl)
-# #			if contestRegex is not None and timeStmp >= start-50*24*60*60 and timeStmp <= end:
-# 			if contestRegex is not None and timeStmp >= start and timeStmp <= end:
-# 				contestId = contestRegex.group()
-# 				contests.append({
-# 						'time':timeStmp,
-# 						'type':'atcoder',
-# 						'id':contestId
-# 						})
-# 		return contests
-
-
-
-
-
 
 	def parseACTable(self, table, start, end):
 		if table is None:
@@ -135,7 +99,6 @@ class ContestDates:
 				continue
 
 			contestUrl = a_contest.get('href', '')
-			title = a_contest.get_text(" ", strip=True)
 
 			path = urlparse(contestUrl).path.lower()  # e.g. '/contests/arc206'
 			if not re.fullmatch(r'/contests/a[rb]c\d+/?', path):
@@ -160,6 +123,5 @@ class ContestDates:
 		start = getTimestamp(self.config["startDate"])
 		end = getTimestamp(self.config["endDate"])
 		contests = self.getCFContests(start, end) + self.getACContests(start, end)
-		#contests = [{'time': time.time() - 60*60*24*5, 'type':'codeforces', 'id':'1202'}]
 		self.contests = sorted(contests, key=lambda k:k['time'])
 

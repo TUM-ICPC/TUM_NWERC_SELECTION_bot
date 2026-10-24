@@ -6,7 +6,20 @@
     "startDate": "01.09.2025:00.00.01",
     "endDate": "15.10.2025:23.59.59"
   },
-  "onsiteGyms": [],
+  "onsiteGyms": [
+    {
+      "id": 724795,
+      "startTime": "2026-10-18T16:35:00+02:00",
+      "problemSources": [
+        {"contestId": 884, "problem": "A"},
+        {"contestId": 884, "problem": "B"},
+        {"contestId": 884, "problem": "C"},
+        {"contestId": 884, "problem": "D"},
+        {"contestId": 884, "problem": "E"},
+        {"contestId": 884, "problem": "F"}
+      ]
+    }
+  ],
   "users": {
     "Xuan": {
       "codeforces-handle": "Aukotiq",

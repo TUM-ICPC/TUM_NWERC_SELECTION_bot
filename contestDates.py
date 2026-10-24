@@ -8,8 +8,7 @@ from pytz import timezone
 from urllib.parse import urlparse
 
 def getTimestamp(dateString) -> float:
-	local_time = datetime.strptime(dateString, "%d.%m.%Y:%H.%M.%S")
-	return timezone("Europe/Berlin").localize(local_time).timestamp()
+	return datetime.timestamp(datetime.strptime(dateString, "%d.%m.%Y:%H.%M.%S"))
 
 # also allows Div. 1 contest, need to be filtered afterwards
 # if Div. 2 is also present
@@ -26,11 +25,12 @@ class ContestDates:
 		contests = cfapi.request('contest.list', {'gym':'false'})
 		if contests is False:
 			return []
-		# Onsite contests are configured separately in config.json's onsiteGyms.
-		contests = [c for c in contests if start <= c.get('startTimeSeconds', -1) <= end]
-		filteredcontests = [c for c in contests if isValidCFContestName(c['name'])]
+		addContestIds = [2261, 2277]
+		contests = [c for c in contests if c.get('startTimeSeconds', -1) >= start or c['id'] in addContestIds]
+		contests = [c for c in contests if c.get('startTimeSeconds', -1) <= end or c['id'] in addContestIds]
+		filteredcontests = [c for c in contests if isValidCFContestName(c['name']) or c['id'] in addContestIds]
 		filteredcontests = [c for c in filteredcontests if len(
-				[c2 for c2 in contests if c2.get('startTimeSeconds', -1) == c.get('startTimeSeconds', -1)]) == 1]
+				[c2 for c2 in contests if c2.get('startTimeSeconds', -1) == c.get('startTimeSeconds', -1)]) == 1 or c['id'] in addContestIds]
 		return [{		"time": c['startTimeSeconds'],
 								"type": "codeforces",
 								"id": 	c["id"]} for c in filteredcontests]

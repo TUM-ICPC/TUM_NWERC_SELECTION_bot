@@ -16,11 +16,9 @@ class CodeforcesGymContest(Contest):
         handle_map,
         problem_sources=(),
         display_name=None,
-        group_code=None,
     ):
         super().__init__(contest_id, handle_map)
         self.name = display_name or f"Gym{contest_id}"
-        self.group_code = group_code
         self.problem_sources = self.parse_problem_sources(problem_sources)
         self._scored_problem_indices = set()
         self._source_problem_weights = {}
@@ -63,12 +61,12 @@ class CodeforcesGymContest(Contest):
             return False
 
         print(f"Fetching CF Gym {self.id} through the authenticated API.")
-        params = {"contestId": self.id, "participantTypes": "CONTESTANT"}
-        if self.group_code:
-            params["groupCode"] = self.group_code
         standings = cfapi.request(
             "contest.standings",
-            params,
+            {
+                "contestId": self.id,
+                "participantTypes": "CONTESTANT",
+            },
             authenticated=True,
         )
         if not isinstance(standings, dict):

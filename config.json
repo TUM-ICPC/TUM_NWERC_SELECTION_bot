@@ -6,36 +6,7 @@
     "startDate": "01.09.2025:00.00.01",
     "endDate": "15.10.2025:23.59.59"
   },
-  "onsiteGyms": [
-    {
-      "id": 2261,
-      "type": "codeforces",
-      "startTime": "2026-10-17T16:35:00+02:00",
-      "displayName": "ONSITE 1"
-    },
-    {
-      "id": 724795,
-      "type": "cf_gym",
-      "groupCode": "R7sYOrgVJM",
-      "startTime": "2026-10-18T16:35:00+02:00",
-      "displayName": "ONSITE 2",
-      "enabled": false,
-      "_pending": "Authenticated group list is readable, but standings returns contest not found and group.isManager reports no group management permission. Resolve API access and fill problemSources in Gym problem order before enabling.",
-      "problemSources": []
-    },
-    {
-      "id": 2277,
-      "type": "codeforces",
-      "startTime": "2026-10-24T13:05:00+02:00",
-      "displayName": "ONSITE 3"
-    },
-    {
-      "type": "cf_gym",
-      "displayName": "ONSITE 4",
-      "enabled": false,
-      "_pending": "Gym for Sunday 2026-10-25 is not yet known; fill id, startTime, groupCode if needed, and problemSources before enabling."
-    }
-  ],
+  "onsiteGyms": [],
   "users": {
     "Xuan": {
       "codeforces-handle": "Aukotiq",

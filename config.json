@@ -29,6 +29,19 @@
       "id": 2277,
       "type": "codeforces",
       "startTime": "2026-10-24T13:05:00+02:00"
+    },
+    {
+      "id": 727329,
+      "startTime": "2026-10-25T14:05:00+02:00",
+      "displayName": "onsite",
+      "problemSources": [
+        {"contestId": 1901, "problem": "A"},
+        {"contestId": 1901, "problem": "B"},
+        {"contestId": 1901, "problem": "C"},
+        {"contestId": 1901, "problem": "D"},
+        {"contestId": 1901, "problem": "E"},
+        {"contestId": 1901, "problem": "F"}
+      ]
     }
   ],
   "users": {

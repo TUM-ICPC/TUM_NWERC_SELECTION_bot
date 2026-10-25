@@ -32,7 +32,7 @@
     },
     {
       "id": 727329,
-      "startTime": "2026-10-25T14:05:00+02:00",
+      "startTime": "2026-10-25T14:05:00+01:00",
       "displayName": "onsite",
       "problemSources": [
         {"contestId": 1901, "problem": "A"},
